@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Word Cards</title>
+  <meta name="description" content="Карточки для тренировки английских слов. Работает офлайн.">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Word Cards">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Стартовый экран -->
+    <section id="screen-home" class="screen screen-home" aria-labelledby="home-title">
+      <header class="home-header">
+        <h1 id="home-title" class="app-title">Word Cards</h1>
+        <p id="home-total" class="home-total"></p>
+      </header>
+
+      <div class="home-scroll">
+        <div id="home-empty" class="notice notice-info" hidden>
+          <p class="notice-title">Слова пока не добавлены</p>
+          <p>Импортируйте файл <code>words.json</code>, чтобы начать обучение.</p>
+        </div>
+
+        <div id="home-notice" class="notice notice-error" hidden>
+          <p id="home-notice-text"></p>
+        </div>
+
+        <div id="storage-warning" class="notice notice-warning" hidden>
+          <p>Не удалось сохранить слова на устройстве. Изменения могут пропасть после перезапуска приложения.</p>
+        </div>
+
+        <div id="home-controls">
+          <div class="group">
+            <p class="legend">Направление перевода</p>
+            <div id="direction-list" class="option-list">
+              <button type="button" class="option" data-direction="en-ru" aria-pressed="true">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="option-text">
+                  <span class="option-title">Английский → Русский</span>
+                  <span class="option-sub">сначала английское слово</span>
+                </span>
+              </button>
+              <button type="button" class="option" data-direction="ru-en" aria-pressed="false">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="option-text">
+                  <span class="option-title">Русский → Английский</span>
+                  <span class="option-sub">сначала русское слово</span>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div class="group">
+            <p class="legend">Стопка слов</p>
+            <div id="deck-list" class="option-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="home-footer">
+        <button id="btn-start" class="btn btn-primary" type="button">Начать</button>
+        <button id="btn-import" class="btn btn-ghost" type="button">Импорт слов из words.json</button>
+      </footer>
+    </section>
+
+    <!-- Карточка -->
+    <section id="screen-card" class="screen screen-card" aria-label="Карточка слова" hidden>
+      <header class="card-header">
+        <button id="btn-exit" class="icon-btn" type="button" aria-label="Вернуться к выбору режима">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+            <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="card-meta">
+          <span id="card-label" class="card-label"></span>
+          <span id="card-progress" class="card-progress">1 / 1</span>
+        </div>
+        <span class="icon-btn icon-btn--placeholder" aria-hidden="true"></span>
+      </header>
+
+      <div id="card" class="card" data-revealed="false" role="button" tabindex="0" aria-label="Карточка. Нажмите, чтобы увидеть перевод">
+        <div id="card-front-box" class="card-front-box">
+          <span id="card-front" class="card-word"></span>
+        </div>
+        <div class="card-back-wrap">
+          <div class="card-back-inner">
+            <div class="card-divider" aria-hidden="true"></div>
+            <span id="card-back" class="card-word card-word--back"></span>
+          </div>
+        </div>
+        <p class="card-hint">Нажмите на карточку, чтобы увидеть перевод</p>
+      </div>
+
+      <footer class="card-footer">
+        <button id="btn-speak" class="btn btn-icon" type="button" aria-label="Прослушать произношение">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+            <path d="M4 9.5h3.2L12 5.6v12.8L7.2 14.5H4z" fill="currentColor"/>
+            <path d="M15.4 8.6a4.8 4.8 0 0 1 0 6.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+            <path d="M18.1 5.9a8.6 8.6 0 0 1 0 12.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button id="btn-next" class="btn btn-primary btn-next" type="button">Дальше</button>
+      </footer>
+    </section>
+
+    <!-- Завершение -->
+    <section id="screen-finish" class="screen screen-finish" aria-labelledby="finish-title" hidden>
+      <div class="finish-body">
+        <div class="finish-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="42" height="42">
+            <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2 id="finish-title" class="finish-title">Стопка пройдена</h2>
+        <p id="finish-count" class="finish-count"></p>
+      </div>
+      <footer class="finish-footer">
+        <button id="btn-again" class="btn btn-primary" type="button">Пройти ещё раз</button>
+        <button id="btn-home" class="btn btn-ghost" type="button">Выбрать другой режим</button>
+      </footer>
+    </section>
+
+    <!-- Импорт -->
+    <section id="screen-import" class="screen screen-import" aria-labelledby="import-title" hidden>
+      <header class="card-header">
+        <button id="btn-import-back" class="icon-btn" type="button" aria-label="Вернуться на стартовый экран">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+            <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="card-meta"><span class="card-label">Импорт слов</span></div>
+        <span class="icon-btn icon-btn--placeholder" aria-hidden="true"></span>
+      </header>
+
+      <div class="import-body">
+        <p class="import-lead">Выберите файл <code>words.json</code>. Новые слова добавятся к текущей базе, совпадения будут пропущены.</p>
+
+        <ul class="import-steps">
+          <li>Файл — список объектов вида <code>{ "en": "apple", "ru": "яблоко" }</code>.</li>
+          <li>Пустые и неполные записи пропускаются.</li>
+          <li>Слова с одинаковым английским и русским значением не дублируются.</li>
+        </ul>
+
+        <label class="btn btn-primary file-btn">
+          <input id="file-input" type="file" accept=".json,application/json" hidden>
+          Выбрать файл words.json
+        </label>
+
+        <button id="btn-download-sample" class="btn btn-ghost" type="button">Скачать пример words.json (200 слов)</button>
+
+        <div id="import-result" class="notice" aria-live="polite" hidden></div>
+      </div>
+    </section>
+  </div>
+
+  <noscript>
+    <p style="padding:24px;font-family:sans-serif">Для работы приложения нужен включённый JavaScript.</p>
+  </noscript>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
