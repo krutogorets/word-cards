@@ -21,6 +21,16 @@ import {
   swipeDirection,
   tapCard,
 } from './session.js';
+import {
+  SWIPE_ENTER_MS,
+  SWIPE_EXIT_MS,
+  SWIPE_RETURN_MS,
+  dragTransform,
+  enterTransform,
+  exitTransform,
+  restTransform,
+  transformCss,
+} from './motion.js';
 import { SEED_WORDS } from './seed-words.js';
 
 const STORAGE_KEY = 'word-cards.words.v1';
@@ -39,7 +49,8 @@ const state = {
   screen: 'home',
   storageOk: true,
   speakingTimer: null,
-  suppressTap: false,
+  suppressTapUntil: 0,
+  cardAnimating: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -140,7 +151,11 @@ function showScreen(name) {
   for (const [key, node] of Object.entries(dom.screens)) {
     node.hidden = key !== name;
   }
-  if (name !== 'card') stopRevealTimer();
+  if (name !== 'card') {
+    stopRevealTimer();
+    state.cardAnimating = false;
+    clearCardMotion();
+  }
   if (name === 'home') pushedInner = false;
   window.scrollTo(0, 0);
 }
@@ -277,6 +292,132 @@ function showHomeNotice(text) {
   dom.homeNotice.hidden = !text;
 }
 
+/* ---------- Анимация карточки ---------- */
+
+const reducedMotionQuery =
+  typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+/** Анимация перелистывания отключается, если система просит меньше движения. */
+function prefersReducedMotion() {
+  return Boolean(reducedMotionQuery && reducedMotionQuery.matches);
+}
+
+function cardWidth() {
+  return dom.card.clientWidth || window.innerWidth || 320;
+}
+
+/** Вызывает колбэк после transform-перехода, но не позже страховочной задержки. */
+function afterTransformTransition(node, duration, callback) {
+  let done = false;
+  let timer = null;
+
+  function finish() {
+    if (done) return;
+    done = true;
+    node.removeEventListener('transitionend', onEnd);
+    if (timer !== null) window.clearTimeout(timer);
+    callback();
+  }
+
+  function onEnd(event) {
+    if (event.target === node && event.propertyName === 'transform') finish();
+  }
+
+  node.addEventListener('transitionend', onEnd);
+  timer = window.setTimeout(finish, duration + 90);
+}
+
+/**
+ * Применяет состояние карточки без переходов. Иначе при перелистывании перевод
+ * новой карточки успевает мелькнуть в ещё раскрытой панели предыдущей (карточка #24).
+ */
+function withInstantCardState(apply) {
+  dom.card.classList.add('is-switching');
+  apply();
+  void dom.card.offsetHeight;
+  dom.card.classList.remove('is-switching');
+}
+
+function clearCardMotion() {
+  const card = dom.card;
+  card.classList.remove('is-dragging', 'is-animating');
+  card.style.transition = '';
+  card.style.transform = '';
+  card.style.opacity = '';
+}
+
+function paintCardMotion(motion) {
+  dom.card.style.transform = transformCss(motion);
+  dom.card.style.opacity = String(motion.opacity);
+}
+
+/** Пружинный возврат после незавершённого или заблокированного свайпа. */
+function springBackCard() {
+  if (state.cardAnimating) return;
+
+  if (prefersReducedMotion()) {
+    clearCardMotion();
+    return;
+  }
+
+  const card = dom.card;
+  state.cardAnimating = true;
+  card.classList.remove('is-dragging');
+  card.classList.add('is-animating');
+  card.style.transition = `transform ${SWIPE_RETURN_MS}ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity ${SWIPE_RETURN_MS}ms ease`;
+  paintCardMotion(restTransform());
+
+  afterTransformTransition(card, SWIPE_RETURN_MS, () => {
+    state.cardAnimating = false;
+    clearCardMotion();
+  });
+}
+
+/** Свайп: текущая карточка улетает за край, следующая влетает с противоположной стороны. */
+function animateSwipe(direction) {
+  if (state.cardAnimating) return;
+
+  if (prefersReducedMotion()) {
+    if (direction === 'next') applyNextCard();
+    else applyPreviousCard();
+    clearCardMotion();
+    return;
+  }
+
+  const card = dom.card;
+  const width = cardWidth();
+
+  state.cardAnimating = true;
+  stopRevealTimer(); // таймер раскрытия не должен сработать в полёте
+  card.classList.remove('is-dragging');
+  card.classList.add('is-animating');
+  card.style.transition = `transform ${SWIPE_EXIT_MS}ms cubic-bezier(0.4, 0, 1, 1), opacity ${SWIPE_EXIT_MS}ms ease-in`;
+  paintCardMotion(exitTransform(direction, width));
+
+  afterTransformTransition(card, SWIPE_EXIT_MS, () => {
+    card.style.transition = 'none';
+    paintCardMotion(enterTransform(direction, width));
+
+    const result = direction === 'next' ? applyNextCard() : applyPreviousCard();
+    if (result !== 'moved' || state.screen !== 'card') {
+      state.cardAnimating = false;
+      clearCardMotion();
+      return;
+    }
+
+    void card.offsetHeight;
+    card.classList.add('is-animating');
+    card.style.transition = `transform ${SWIPE_ENTER_MS}ms cubic-bezier(0.16, 1, 0.3, 1), opacity ${SWIPE_ENTER_MS}ms ease-out`;
+    paintCardMotion(restTransform());
+
+    afterTransformTransition(card, SWIPE_ENTER_MS, () => {
+      state.cardAnimating = false;
+      clearCardMotion();
+      fitCardText();
+    });
+  });
+}
+
 /* ---------- Сессия и карточка ---------- */
 
 function startSession(mode) {
@@ -288,6 +429,8 @@ function startSession(mode) {
 
   showHomeNotice('');
   stopRevealTimer();
+  state.cardAnimating = false;
+  clearCardMotion();
   state.mode = mode;
   state.session = createSession({ words, mode, label: modeLabel(mode) });
   navigate('card');
@@ -301,12 +444,14 @@ function renderCard() {
   const word = session.words[session.index];
   const map = DIRECTIONS[state.direction];
 
-  dom.cardFront.textContent = word[map.front];
-  dom.cardBack.textContent = word[map.back];
-  dom.cardLabel.textContent = session.label;
-  dom.cardProgress.textContent = `${session.index + 1} / ${session.words.length}`;
+  withInstantCardState(() => {
+    dom.cardFront.textContent = word[map.front];
+    dom.cardBack.textContent = word[map.back];
+    dom.cardLabel.textContent = session.label;
+    dom.cardProgress.textContent = `${session.index + 1} / ${session.words.length}`;
+    syncCardReveal();
+  });
 
-  syncCardReveal();
   updateNavButtons();
   if (isRevealed(session)) {
     stopRevealTimer();
@@ -333,11 +478,8 @@ function syncCardReveal() {
 /** Нажатие на карточку: скрытая раскрывается, раскрытая листает вперёд. */
 function handleCardTap() {
   const session = state.session;
-  if (!session) return;
-  if (state.suppressTap) {
-    state.suppressTap = false;
-    return;
-  }
+  if (!session || state.cardAnimating) return;
+  if (Date.now() < state.suppressTapUntil) return;
 
   const result = tapCard(session);
   state.session = result.session;
@@ -375,25 +517,40 @@ function stopRevealTimer() {
   state.timerToken += 1;
 }
 
-function goNext() {
+/** Переход вперёд без проверки анимации: 'moved' | 'finished'. */
+function applyNextCard() {
   const session = state.session;
-  if (!session) return;
+  if (!session) return 'finished';
 
   const result = goToNext(session);
   if (result.finished) {
     finishSession();
-    return;
+    return 'finished';
   }
 
   state.session = result.session;
   renderCard();
+  return 'moved';
+}
+
+/** Переход назад без проверки анимации: 'moved' | 'blocked'. */
+function applyPreviousCard() {
+  const session = state.session;
+  if (!session || !canGoBack(session)) return 'blocked';
+
+  state.session = goToPrevious(session);
+  renderCard();
+  return 'moved';
+}
+
+function goNext() {
+  if (state.cardAnimating) return;
+  applyNextCard();
 }
 
 function goPrev() {
-  const session = state.session;
-  if (!session || !canGoBack(session)) return;
-  state.session = goToPrevious(session);
-  renderCard();
+  if (state.cardAnimating) return;
+  applyPreviousCard();
 }
 
 function updateNavButtons() {
@@ -404,6 +561,9 @@ function finishSession() {
   const session = state.session;
   stopRevealTimer();
   if (!session) return;
+
+  state.cardAnimating = false;
+  clearCardMotion();
 
   dom.finishTitle.textContent =
     session.mode.type === 'random' ? 'Случайная сессия пройдена' : `Стопка ${session.mode.number} пройдена`;
@@ -701,30 +861,77 @@ dom.card.addEventListener('transitionend', (event) => {
 });
 
 /* Свайп по карточке: влево — следующее слово, вправо — предыдущее. */
+const DRAG_START_PX = 12;
+
 let touchStart = null;
+let cardDrag = null;
+
+function resetCardDrag() {
+  touchStart = null;
+  cardDrag = null;
+}
 
 dom.card.addEventListener(
   'touchstart',
   (event) => {
-    if (event.touches.length !== 1) {
-      touchStart = null;
+    if (event.touches.length !== 1 || state.cardAnimating) {
+      resetCardDrag();
       return;
     }
     const touch = event.touches[0];
     touchStart = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    cardDrag = null;
   },
   { passive: true },
 );
 
-dom.card.addEventListener('touchcancel', () => {
-  touchStart = null;
-}, { passive: true });
+dom.card.addEventListener(
+  'touchmove',
+  (event) => {
+    if (!touchStart || state.cardAnimating) return;
+    if (event.touches.length !== 1) {
+      resetCardDrag();
+      return;
+    }
+
+    const touch = event.touches[0];
+    const dx = touch.clientX - touchStart.x;
+    const dy = touch.clientY - touchStart.y;
+
+    if (!cardDrag) {
+      if (Math.abs(dx) < DRAG_START_PX && Math.abs(dy) < DRAG_START_PX) return;
+      // Вертикальное движение — не свайп: не мешаем браузеру и оставляем карточку на месте.
+      if (Math.abs(dy) >= Math.abs(dx)) {
+        resetCardDrag();
+        return;
+      }
+      cardDrag = { dx: 0, blocked: dx > 0 && !canGoBack(state.session) };
+      dom.card.classList.add('is-dragging');
+      dom.card.style.transition = 'none';
+    }
+
+    cardDrag.dx = dx;
+    paintCardMotion(dragTransform(dx, cardWidth(), { blocked: cardDrag.blocked }));
+  },
+  { passive: true },
+);
+
+dom.card.addEventListener(
+  'touchcancel',
+  () => {
+    const dragged = cardDrag !== null;
+    resetCardDrag();
+    if (dragged) springBackCard();
+  },
+  { passive: true },
+);
 
 dom.card.addEventListener(
   'touchend',
   (event) => {
     const start = touchStart;
-    touchStart = null;
+    const dragged = cardDrag;
+    resetCardDrag();
     if (!start) return;
 
     const touch = event.changedTouches[0];
@@ -735,16 +942,21 @@ dom.card.addEventListener(
       y: touch.clientY,
       time: Date.now(),
     });
-    if (!direction) return;
 
     // Свайп не должен превращаться в тап по карточке.
-    state.suppressTap = true;
-    window.setTimeout(() => {
-      state.suppressTap = false;
-    }, 400);
+    if (dragged) state.suppressTapUntil = Date.now() + 700;
 
-    if (direction === 'next') goNext();
-    else goPrev();
+    if (!direction) {
+      if (dragged) springBackCard();
+      return;
+    }
+
+    if (direction === 'previous' && !canGoBack(state.session)) {
+      if (dragged) springBackCard();
+      return;
+    }
+
+    animateSwipe(direction);
   },
   { passive: true },
 );

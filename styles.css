@@ -412,6 +412,23 @@ button {
   transform: scale(0.996);
 }
 
+/* Смена карточки применяет состояние раскрытия мгновенно: иначе перевод новой
+   карточки мелькает в ещё раскрытой панели предыдущей. */
+.card.is-switching .card-back-wrap,
+.card.is-switching .card-hint {
+  transition: none;
+}
+
+/* Свайп: карточка идёт за пальцем без инерции базового перехода. */
+.card.is-dragging {
+  transition: none;
+}
+
+.card.is-animating {
+  will-change: transform, opacity;
+  cursor: grabbing;
+}
+
 .card-front-box {
   flex: 1 1 auto;
   min-height: 0;
