@@ -1,5 +1,5 @@
 /* Service worker: полностью офлайн-приложение после первой загрузки. */
-const CACHE = 'word-cards-v2';
+const CACHE = 'word-cards-v3';
 
 const ASSETS = [
   './',
@@ -7,6 +7,7 @@ const ASSETS = [
   './styles.css',
   './app.js',
   './core.js',
+  './session.js',
   './seed-words.js',
   './manifest.webmanifest',
   './words.json',
