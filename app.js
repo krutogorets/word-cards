@@ -11,6 +11,16 @@ import {
   modeLabel,
   parseWordsJson,
 } from './core.js';
+import {
+  canGoBack,
+  createSession,
+  goToNext,
+  goToPrevious,
+  isRevealed,
+  revealCurrent,
+  swipeDirection,
+  tapCard,
+} from './session.js';
 import { SEED_WORDS } from './seed-words.js';
 
 const STORAGE_KEY = 'word-cards.words.v1';
@@ -29,6 +39,7 @@ const state = {
   screen: 'home',
   storageOk: true,
   speakingTimer: null,
+  suppressTap: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -57,6 +68,7 @@ const dom = {
   cardProgress: $('card-progress'),
   cardLabel: $('card-label'),
   btnNext: $('btn-next'),
+  btnPrev: $('btn-prev'),
   btnSpeak: $('btn-speak'),
   btnExit: $('btn-exit'),
   finishTitle: $('finish-title'),
@@ -67,6 +79,11 @@ const dom = {
   fileInput: $('file-input'),
   btnDownloadSample: $('btn-download-sample'),
   btnImportBack: $('btn-import-back'),
+  btnClear: $('btn-clear'),
+  clearDialog: $('clear-dialog'),
+  clearDialogText: $('clear-dialog-text'),
+  btnClearCancel: $('btn-clear-cancel'),
+  btnClearConfirm: $('btn-clear-confirm'),
 };
 
 /* ---------- Хранилище ---------- */
@@ -169,6 +186,7 @@ function renderHome() {
   dom.homeControls.hidden = empty;
   dom.btnStart.hidden = empty;
   dom.btnStart.disabled = empty;
+  dom.btnClear.hidden = empty;
   dom.storageWarning.hidden = state.storageOk;
 
   for (const button of dom.directionButtons) {
@@ -181,24 +199,26 @@ function renderHome() {
   }
 
   dom.deckList.replaceChildren();
-  for (const stack of stacks) {
+  if (!empty) {
+    for (const stack of stacks) {
+      dom.deckList.append(
+        createOption({
+          title: `Стопка ${stack.number}`,
+          sub: `слова с ${stack.start + 1} по ${stack.end}`,
+          meta: wordForms(stack.count),
+          mode: { type: 'stack', number: stack.number },
+        }),
+      );
+    }
     dom.deckList.append(
       createOption({
-        title: `Стопка ${stack.number}`,
-        sub: `слова с ${stack.start + 1} по ${stack.end}`,
-        meta: wordForms(stack.count),
-        mode: { type: 'stack', number: stack.number },
+        title: 'Случайный режим',
+        sub: 'слова из всей базы',
+        meta: wordForms(Math.min(RANDOM_SESSION_SIZE, total)),
+        mode: { type: 'random' },
       }),
     );
   }
-  dom.deckList.append(
-    createOption({
-      title: 'Случайный режим',
-      sub: 'слова из всей базы',
-      meta: wordForms(Math.min(RANDOM_SESSION_SIZE, total)),
-      mode: { type: 'random' },
-    }),
-  );
 
   syncSelection();
 }
@@ -269,13 +289,7 @@ function startSession(mode) {
   showHomeNotice('');
   stopRevealTimer();
   state.mode = mode;
-  state.session = {
-    words,
-    index: 0,
-    revealed: false,
-    mode: { ...mode },
-    label: modeLabel(mode),
-  };
+  state.session = createSession({ words, mode, label: modeLabel(mode) });
   navigate('card');
   renderCard();
 }
@@ -291,24 +305,55 @@ function renderCard() {
   dom.cardBack.textContent = word[map.back];
   dom.cardLabel.textContent = session.label;
   dom.cardProgress.textContent = `${session.index + 1} / ${session.words.length}`;
-  dom.card.dataset.revealed = 'false';
-  dom.card.setAttribute('aria-label', 'Карточка. Нажмите, чтобы увидеть перевод');
 
-  updateSpeakButton();
-  startRevealTimer();
+  syncCardReveal();
+  updateNavButtons();
+  if (isRevealed(session)) {
+    stopRevealTimer();
+  } else {
+    startRevealTimer();
+  }
   fitCardText();
 }
 
-function revealCard() {
-  const session = state.session;
-  if (!session || session.revealed) return;
-
-  session.revealed = true;
-  stopRevealTimer();
-  dom.card.dataset.revealed = 'true';
-  dom.card.setAttribute('aria-label', 'Карточка раскрыта. Нажмите «Дальше», чтобы продолжить');
+/** Приводит вид карточки в соответствие с её состоянием раскрытия. */
+function syncCardReveal() {
+  const revealed = isRevealed(state.session);
+  dom.card.dataset.revealed = String(revealed);
+  dom.card.setAttribute(
+    'aria-label',
+    revealed
+      ? 'Карточка раскрыта. Нажмите, чтобы перейти к следующему слову'
+      : 'Карточка. Нажмите, чтобы увидеть перевод',
+  );
   updateSpeakButton();
   fitCardText();
+}
+
+/** Нажатие на карточку: скрытая раскрывается, раскрытая листает вперёд. */
+function handleCardTap() {
+  const session = state.session;
+  if (!session) return;
+  if (state.suppressTap) {
+    state.suppressTap = false;
+    return;
+  }
+
+  const result = tapCard(session);
+  state.session = result.session;
+
+  if (result.action === 'reveal') {
+    stopRevealTimer();
+    syncCardReveal();
+    return;
+  }
+  if (result.action === 'next') {
+    renderCard();
+    return;
+  }
+  if (result.action === 'finish') {
+    finishSession();
+  }
 }
 
 function startRevealTimer() {
@@ -317,7 +362,8 @@ function startRevealTimer() {
   state.timer = window.setTimeout(() => {
     if (token !== state.timerToken) return;
     state.timer = null;
-    revealCard();
+    state.session = revealCurrent(state.session);
+    syncCardReveal();
   }, REVEAL_DELAY_MS);
 }
 
@@ -333,14 +379,25 @@ function goNext() {
   const session = state.session;
   if (!session) return;
 
-  if (session.index + 1 >= session.words.length) {
+  const result = goToNext(session);
+  if (result.finished) {
     finishSession();
     return;
   }
 
-  session.index += 1;
-  session.revealed = false;
+  state.session = result.session;
   renderCard();
+}
+
+function goPrev() {
+  const session = state.session;
+  if (!session || !canGoBack(session)) return;
+  state.session = goToPrevious(session);
+  renderCard();
+}
+
+function updateNavButtons() {
+  dom.btnPrev.disabled = !canGoBack(state.session);
 }
 
 function finishSession() {
@@ -428,7 +485,7 @@ function pickEnglishVoice() {
 function speakAvailable() {
   if (!ttsSupported) return false;
   if (state.direction === 'en-ru') return true;
-  return Boolean(state.session && state.session.revealed);
+  return isRevealed(state.session);
 }
 
 function updateSpeakButton() {
@@ -583,6 +640,38 @@ async function downloadSample() {
   }
 }
 
+/* ---------- Очистка базы ---------- */
+
+function openClearDialog() {
+  if (!state.words.length) return;
+  dom.clearDialogText.textContent = `Будут удалены все слова из базы — ${wordForms(
+    state.words.length,
+  )}. Отменить это действие нельзя.`;
+  if (typeof dom.clearDialog.showModal === 'function') {
+    dom.clearDialog.showModal();
+  } else {
+    dom.clearDialog.setAttribute('open', '');
+  }
+}
+
+function closeClearDialog() {
+  if (typeof dom.clearDialog.close === 'function') {
+    dom.clearDialog.close();
+  } else {
+    dom.clearDialog.removeAttribute('open');
+  }
+}
+
+function clearBase() {
+  stopRevealTimer();
+  state.words = [];
+  state.session = null;
+  state.mode = { type: 'random' };
+  state.storageOk = saveWords(state.words);
+  showHomeNotice('');
+  renderHome();
+}
+
 /* ---------- События ---------- */
 
 for (const button of dom.directionButtons) {
@@ -593,19 +682,75 @@ dom.btnStart.addEventListener('click', () => startSession(state.mode));
 dom.btnImport.addEventListener('click', openImport);
 dom.btnImportBack.addEventListener('click', goHome);
 dom.btnExit.addEventListener('click', goHome);
+dom.btnClear.addEventListener('click', openClearDialog);
+dom.btnClearCancel.addEventListener('click', closeClearDialog);
+dom.btnClearConfirm.addEventListener('click', () => {
+  closeClearDialog();
+  clearBase();
+});
 
-dom.card.addEventListener('click', revealCard);
+dom.card.addEventListener('click', handleCardTap);
 dom.card.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
-    revealCard();
+    handleCardTap();
   }
 });
 dom.card.addEventListener('transitionend', (event) => {
   if (event.propertyName === 'grid-template-rows') fitCardText();
 });
 
+/* Свайп по карточке: влево — следующее слово, вправо — предыдущее. */
+let touchStart = null;
+
+dom.card.addEventListener(
+  'touchstart',
+  (event) => {
+    if (event.touches.length !== 1) {
+      touchStart = null;
+      return;
+    }
+    const touch = event.touches[0];
+    touchStart = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  },
+  { passive: true },
+);
+
+dom.card.addEventListener('touchcancel', () => {
+  touchStart = null;
+}, { passive: true });
+
+dom.card.addEventListener(
+  'touchend',
+  (event) => {
+    const start = touchStart;
+    touchStart = null;
+    if (!start) return;
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const direction = swipeDirection(start, {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now(),
+    });
+    if (!direction) return;
+
+    // Свайп не должен превращаться в тап по карточке.
+    state.suppressTap = true;
+    window.setTimeout(() => {
+      state.suppressTap = false;
+    }, 400);
+
+    if (direction === 'next') goNext();
+    else goPrev();
+  },
+  { passive: true },
+);
+
 dom.btnNext.addEventListener('click', goNext);
+dom.btnPrev.addEventListener('click', goPrev);
 dom.btnSpeak.addEventListener('click', speakCurrentWord);
 
 dom.btnAgain.addEventListener('click', () => {

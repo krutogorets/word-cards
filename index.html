@@ -26,7 +26,7 @@
       <div class="home-scroll">
         <div id="home-empty" class="notice notice-info" hidden>
           <p class="notice-title">Слова пока не добавлены</p>
-          <p>Импортируйте файл <code>words.json</code>, чтобы начать обучение.</p>
+          <p>Импортируйте файл со словами в формате <code>.json</code>, чтобы начать обучение.</p>
         </div>
 
         <div id="home-notice" class="notice notice-error" hidden>
@@ -67,7 +67,8 @@
 
       <footer class="home-footer">
         <button id="btn-start" class="btn btn-primary" type="button">Начать</button>
-        <button id="btn-import" class="btn btn-ghost" type="button">Импорт слов из words.json</button>
+        <button id="btn-import" class="btn btn-ghost" type="button">Импорт слов из файла</button>
+        <button id="btn-clear" class="btn btn-ghost btn-ghost--danger" type="button">Очистить базу слов</button>
       </footer>
     </section>
 
@@ -107,7 +108,16 @@
             <path d="M18.1 5.9a8.6 8.6 0 0 1 0 12.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
           </svg>
         </button>
-        <button id="btn-next" class="btn btn-primary btn-next" type="button">Дальше</button>
+        <button id="btn-prev" class="btn btn-nav btn-nav--prev" type="button" aria-label="Предыдущее слово">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+            <path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="btn-next" class="btn btn-primary btn-nav btn-nav--next" type="button" aria-label="Следующее слово">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+            <path d="M9.5 5.5L16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </footer>
     </section>
 
@@ -141,17 +151,17 @@
       </header>
 
       <div class="import-body">
-        <p class="import-lead">Выберите файл <code>words.json</code>. Новые слова добавятся к текущей базе, совпадения будут пропущены.</p>
+        <p class="import-lead">Выберите любой <code>.json</code> файл со списком слов — имя файла не важно. Новые слова добавятся к текущей базе, совпадения будут пропущены.</p>
 
         <ul class="import-steps">
-          <li>Файл — список объектов вида <code>{ "en": "apple", "ru": "яблоко" }</code>.</li>
+          <li>Содержимое — JSON-список объектов вида <code>{ "en": "apple", "ru": "яблоко" }</code>.</li>
           <li>Пустые и неполные записи пропускаются.</li>
           <li>Слова с одинаковым английским и русским значением не дублируются.</li>
         </ul>
 
         <label class="btn btn-primary file-btn">
           <input id="file-input" type="file" accept=".json,application/json" hidden>
-          Выбрать файл words.json
+          Выбрать .json файл
         </label>
 
         <button id="btn-download-sample" class="btn btn-ghost" type="button">Скачать пример words.json (200 слов)</button>
@@ -159,6 +169,16 @@
         <div id="import-result" class="notice" aria-live="polite" hidden></div>
       </div>
     </section>
+
+    <!-- Подтверждение очистки базы -->
+    <dialog id="clear-dialog" class="dialog" aria-labelledby="clear-dialog-title">
+      <h2 id="clear-dialog-title" class="dialog-title">Очистить базу слов?</h2>
+      <p id="clear-dialog-text" class="dialog-text"></p>
+      <div class="dialog-actions">
+        <button id="btn-clear-cancel" class="btn btn-ghost" type="button">Отмена</button>
+        <button id="btn-clear-confirm" class="btn btn-danger" type="button">Очистить</button>
+      </div>
+    </dialog>
   </div>
 
   <noscript>

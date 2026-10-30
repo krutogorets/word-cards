@@ -32,7 +32,7 @@ function isPlainObject(value) {
 }
 
 /**
- * Разбирает текст файла words.json.
+ * Разбирает текст файла со словами (любое имя, JSON-список объектов en/ru).
  *
  * @param {string} text
  * @returns {{ok: boolean, words?: Array<{en: string, ru: string}>, stats?: object,
@@ -43,7 +43,7 @@ export function parseWordsJson(text) {
     return {
       ok: false,
       reason: 'empty-file',
-      error: 'Файл пустой. Выберите файл words.json со словами.',
+      error: 'Файл пустой. Выберите JSON-файл со словами.',
     };
   }
 

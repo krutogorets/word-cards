@@ -14,6 +14,8 @@
   --accent-soft: #eef0ff;
   --danger: #b42318;
   --danger-soft: #fef3f2;
+  --danger-solid: #b42318;
+  --danger-solid-press: #912018;
   --warning: #b54708;
   --warning-soft: #fffaeb;
   --success: #067647;
@@ -38,6 +40,8 @@
     --accent-soft: #21233a;
     --danger: #ff9b91;
     --danger-soft: #2c1a18;
+    --danger-solid: #b42318;
+    --danger-solid-press: #912018;
     --warning: #ffc86b;
     --warning-soft: #2a2213;
     --success: #6ee7a8;
@@ -283,6 +287,24 @@ button {
   background: var(--accent-soft);
 }
 
+.btn-ghost--danger {
+  color: var(--danger);
+}
+
+.btn-ghost--danger:active {
+  background: var(--danger-soft);
+}
+
+.btn-danger {
+  background: var(--danger-solid);
+  color: #ffffff;
+  box-shadow: 0 10px 22px -16px rgba(180, 35, 24, 0.9);
+}
+
+.btn-danger:active {
+  background: var(--danger-solid-press);
+}
+
 .btn-icon {
   flex: 0 0 60px;
   width: 60px;
@@ -460,8 +482,62 @@ button {
   gap: 10px;
 }
 
-.btn-next {
+.btn-nav {
   flex: 1 1 auto;
+  min-height: 60px;
+  padding: 0;
+}
+
+.btn-nav--prev {
+  flex: 0 0 76px;
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.btn-nav--prev:active {
+  background: var(--surface-soft);
+}
+
+.btn-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+/* ---------- Диалог подтверждения ---------- */
+.dialog {
+  width: min(420px, calc(100vw - 36px));
+  padding: 22px 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.dialog::backdrop {
+  background: rgba(17, 24, 39, 0.5);
+}
+
+.dialog-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.dialog-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 /* ---------- Завершение ---------- */
